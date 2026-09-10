@@ -188,7 +188,7 @@ function App() {
     setSearch('')
   }
 
-  const libraryName = library === 'mine' ? '我的词库' : library === 'GRE' ? 'GRE（镇考 3000 词）' : library
+  const libraryName = library === 'mine' ? '我的词库' : library === 'GRE' ? 'GRE（镇考 3000 词）' : 'TOEFL（ECDICT 词库）'
 
   return (
     <div className="app-shell">
@@ -221,9 +221,9 @@ function App() {
             <div className="library-directory">
               <button onClick={() => setLibrary('mine')}><span><strong>我的词库</strong><small>手动录入与收藏</small></span><em>{words.length}</em></button>
               <button onClick={() => setLibrary('GRE')}><span><strong>GRE</strong><small>镇考 3000 词</small></span><em>{wordsForList('GRE').length}</em></button>
-              <button onClick={() => setLibrary('TOEFL')}><span><strong>TOEFL</strong><small>内置演示词库</small></span><em>{wordsForList('TOEFL').length}</em></button>
+              <button onClick={() => setLibrary('TOEFL')}><span><strong>TOEFL</strong><small>ECDICT 词库</small></span><em>{wordsForList('TOEFL').length}</em></button>
             </div>
-            <p className="data-caption">内置词库只读；TOEFL 当前为演示数据，完整版本将在确认开源许可后加入。</p>
+            <p className="data-caption">内置词库为只读数据，收藏的单词会保存到你的个人词库。</p>
           </section>
         )}
 
@@ -263,7 +263,7 @@ function App() {
 
         {view === 'dictation' && quizSource && (
           <section className="panel quiz-panel">
-            <div className="panel-heading"><div><button className="back-button" onClick={() => { setQuizSource(null); setQuiz([]) }}>← 选择词库</button><h1>默写 · {quizSource === 'mine' ? '我的词库' : quizSource === 'GRE' ? 'GRE（镇考 3000 词）' : quizSource}</h1><p>点击英文查看释义</p></div><button className="quiet-button" onClick={() => startQuiz(quizSource)}>换一组</button></div>
+            <div className="panel-heading"><div><button className="back-button" onClick={() => { setQuizSource(null); setQuiz([]) }}>← 选择词库</button><h1>默写 · {quizSource === 'mine' ? '我的词库' : quizSource === 'GRE' ? 'GRE（镇考 3000 词）' : 'TOEFL（ECDICT 词库）'}</h1><p>点击英文查看释义</p></div><button className="quiet-button" onClick={() => startQuiz(quizSource)}>换一组</button></div>
             {!quiz.length ? <div className="empty">这个词库还是空的。</div> : <div className="quiz-list">{quiz.map((word, index) => <button className={`quiz-row ${revealed.has(word.id) ? 'revealed' : ''}`} onClick={() => toggleAnswer(word.id)} key={word.id}>
               <span>{String(index + 1).padStart(2, '0')}</span><strong>{word.english}</strong><em>{revealed.has(word.id) ? word.chinese : ''}</em>
             </button>)}</div>}
