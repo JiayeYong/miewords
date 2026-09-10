@@ -303,7 +303,7 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .flashcard strong { margin-top: 28px; font-size: clamp(30px, 6vw, 52px); font-weight: 500; overflow-wrap: anywhere; }
 .flashcard p { min-height: 28px; margin: 32px 0 0; color: #9a9f9b; font-size: 15px; line-height: 1.7; }
 .flashcard.flipped { background: #f0f3ed; border-color: #cbd3cc; }
-.flashcard.flipped p { color: #526159; font-size: 18px; }
+.flashcard.flipped p { color: #526159; font-size: clamp(22px, 3vw, 30px); line-height: 1.6; }
 .card-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
 .card-controls button {
   min-height: 44px;

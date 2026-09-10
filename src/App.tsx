@@ -557,7 +557,7 @@ function App() {
             <span>{cardIndex + 1} / {cardWords.length}</span>
           </div>
           <button className={`flashcard ${cardFlipped ? 'flipped' : ''}`} onClick={() => setCardFlipped((value) => !value)}>
-            <span>{cardFlipped ? '中文' : '英文'}</span>
+            {cardFlipped && <span>中文</span>}
             <strong>{currentCard.english}</strong>
             <p>{cardFlipped ? currentCard.chinese : '点击查看中文释义'}</p>
           </button>
