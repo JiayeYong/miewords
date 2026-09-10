@@ -533,7 +533,7 @@ function App() {
             {([GRE_SOURCE, TOEFL_SOURCE] as BuiltInSource[]).map((source) => <article key={source}>
               <div><strong>{source === GRE_SOURCE ? 'GRE' : 'TOEFL'}</strong><small>{source === GRE_SOURCE ? '镇考 3000 词' : 'ECDICT 词库'}</small></div>
               <select value={groupSelections[source]} onChange={(event) => setGroupSelections((current) => ({ ...current, [source]: Number(event.target.value) }))}>
-                {Array.from({ length: Math.ceil(builtInDecks[source].length / 100) }, (_, index) => { const start = index * 100 + 1; const end = Math.min(start + 99, builtInDecks[source].length); return <option value={index} key={index}>List {String(index + 1).padStart(2, '0')} · {start}–{end}</option> })}
+                {Array.from({ length: Math.ceil(builtInDecks[source].length / 100) }, (_, index) => <option value={index} key={index}>List {index + 1}</option>)}
               </select>
               <button className="primary" onClick={() => startCardStudy(source)}>开始背诵</button>
             </article>)}
@@ -553,11 +553,11 @@ function App() {
 
         {view === 'dictation' && cardSession && currentCard && <section className="panel card-study" tabIndex={0} onKeyDown={handleCardKey} autoFocus>
           <div className="card-study-heading">
-            <div><button className="back-button" onClick={() => setCardSession(null)}>← 背诵</button><h1>单词卡</h1><p>{sourceName(cardSession.source)} · List {String(cardSession.groupIndex + 1).padStart(2, '0')}</p></div>
+            <div><button className="back-button" onClick={() => setCardSession(null)}>← 背诵</button><h1>单词卡</h1><p>{sourceName(cardSession.source)} · List {cardSession.groupIndex + 1}</p></div>
             <span>{cardIndex + 1} / {cardWords.length}</span>
           </div>
+          <div className="card-progress" aria-hidden="true"><i style={{ width: `${((cardIndex + 1) / cardWords.length) * 100}%` }} /></div>
           <button className={`flashcard ${cardFlipped ? 'flipped' : ''}`} onClick={() => setCardFlipped((value) => !value)}>
-            {cardFlipped && <span>中文</span>}
             <strong>{currentCard.english}</strong>
             <p>{cardFlipped ? currentCard.chinese : '点击查看中文释义'}</p>
           </button>

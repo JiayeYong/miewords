@@ -5,6 +5,7 @@
   color: #24352d;
   background: #f6f4ed;
   font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
 }
 
 * { box-sizing: border-box; }
@@ -23,6 +24,7 @@ header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  border-bottom: 1px solid rgba(36, 53, 45, .08);
 }
 
 .brand {
@@ -34,14 +36,17 @@ header {
   cursor: pointer;
 }
 
-nav { display: flex; gap: 24px; }
+nav { display: grid; grid-template-columns: repeat(3, 52px); gap: 12px; }
 nav button {
+  width: 100%;
   padding: 5px 0;
   border: 0;
   border-bottom: 1px solid transparent;
   color: #7c847f;
   background: none;
   cursor: pointer;
+  text-align: center;
+  transition: color .18s ease, border-color .18s ease;
 }
 nav button:hover, nav button.active { color: #24352d; border-color: #24352d; }
 nav span { margin-left: 3px; color: #9ba09d; font-size: 11px; }
@@ -51,7 +56,7 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .section-note { margin: 10px 0 0; color: #969b97; font-size: 12px; }
 .loading { display: grid; min-height: 100vh; place-items: center; color: #7c847f; }
 
-.hero { max-width: 620px; margin: 18vh auto 0; }
+.hero { max-width: 620px; margin: 15vh auto 0; }
 .destination, .collect-target {
   display: flex;
   align-items: center;
@@ -91,14 +96,16 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 
 .primary {
   min-width: 92px;
-  padding: 11px 20px;
+  min-height: 42px;
+  padding: 10px 20px;
   border: 0;
   border-radius: 4px;
   color: white;
   background: #315d47;
   cursor: pointer;
+  transition: background .18s ease, transform .18s ease;
 }
-.primary:hover { background: #274c3a; }
+.primary:hover { background: #274c3a; transform: translateY(-1px); }
 .primary:disabled { opacity: .45; cursor: default; }
 .text-button, .quiet-button {
   margin-left: 0;
@@ -111,7 +118,7 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .text-button:hover, .quiet-button:hover { color: #24352d; }
 .quiet-button.danger:hover { color: #9a4937; }
 
-.panel { padding-top: 90px; }
+.panel { padding-top: 76px; }
 .panel-heading {
   display: flex;
   align-items: end;
@@ -144,13 +151,15 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
   justify-content: space-between;
   width: 100%;
   min-height: 82px;
-  padding: 0 4px;
+  padding: 0 10px;
   border: 0;
   border-bottom: 1px solid #ddddD6;
   background: none;
   text-align: left;
   cursor: pointer;
+  transition: background .16s ease;
 }
+.library-directory > button:hover { background: rgba(255, 255, 255, .35); }
 .library-directory > button:hover strong { color: #315d47; }
 .library-directory strong { display: block; font-size: 19px; font-weight: 500; }
 .library-directory small { display: block; margin-top: 5px; color: #9a9f9b; }
@@ -223,10 +232,11 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
   gap: 20px;
   align-items: center;
   min-height: 86px;
-  padding: 0 4px;
-  border-top: 1px solid #d1d1ca;
+  padding: 20px;
+  border: 1px solid #deddd5;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .28);
 }
-.deck-selectors article:last-child { border-bottom: 1px solid #d1d1ca; }
 .deck-selectors strong, .deck-selectors small { display: block; }
 .deck-selectors strong { font-size: 19px; font-weight: 500; }
 .deck-selectors small { margin-top: 5px; color: #9a9f9b; }
@@ -236,7 +246,7 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
   border: 1px solid #d1d1ca;
   border-radius: 4px;
   color: #526159;
-  background: transparent;
+  background: #faf9f4;
 }
 .deck-selectors .primary { width: 110px; }
 .quiz-panel { max-width: 680px; margin: auto; }
@@ -284,26 +294,29 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .card-study-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 42px; }
 .card-study-heading p { margin: 10px 0 0; color: #8a908c; font-size: 13px; }
 .card-study-heading > span { color: #7d8780; font-size: 13px; }
+.card-progress { height: 2px; margin: -22px 0 20px; overflow: hidden; background: #dfdfd7; }
+.card-progress i { display: block; height: 100%; background: #52715f; transition: width .2s ease; }
 .flashcard {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 390px;
+  min-height: 410px;
   padding: 54px;
   border: 1px solid #dad9d1;
-  border-radius: 12px;
+  border-radius: 10px;
   color: #24352d;
   background: #fffef9;
-  box-shadow: 0 12px 40px rgba(35, 53, 45, .06);
+  box-shadow: 0 14px 45px rgba(35, 53, 45, .055);
   cursor: pointer;
+  transition: background .22s ease, border-color .22s ease, box-shadow .22s ease, transform .22s ease;
 }
-.flashcard > span { color: #a0a59f; font-size: 10px; letter-spacing: .12em; }
-.flashcard strong { margin-top: 28px; font-size: clamp(30px, 6vw, 52px); font-weight: 500; overflow-wrap: anywhere; }
-.flashcard p { min-height: 28px; margin: 32px 0 0; color: #9a9f9b; font-size: 15px; line-height: 1.7; }
+.flashcard:hover { border-color: #c8cec8; box-shadow: 0 18px 50px rgba(35, 53, 45, .075); transform: translateY(-1px); }
+.flashcard strong { margin: 0; font-size: clamp(34px, 6vw, 56px); font-weight: 500; line-height: 1.15; overflow-wrap: anywhere; }
+.flashcard p { min-height: 32px; margin: 38px 0 0; color: #9a9f9b; font-size: 14px; line-height: 1.7; }
 .flashcard.flipped { background: #f0f3ed; border-color: #cbd3cc; }
-.flashcard.flipped p { color: #526159; font-size: clamp(22px, 3vw, 30px); line-height: 1.6; }
+.flashcard.flipped p { max-width: 620px; color: #40584b; font-size: clamp(26px, 3.4vw, 36px); font-weight: 500; line-height: 1.55; }
 .card-controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 20px; }
 .card-controls button {
   min-height: 44px;
@@ -314,6 +327,8 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
   cursor: pointer;
 }
 .card-controls button:hover { border-color: #8d9a92; color: #24352d; }
+.card-controls button:last-child { border-color: #315d47; color: white; background: #315d47; }
+.card-controls button:last-child:hover { background: #274c3a; }
 .card-controls button:disabled { opacity: .35; cursor: default; }
 .keyboard-hint { margin: 14px 0 0; color: #a3a7a3; font-size: 11px; text-align: center; }
 
