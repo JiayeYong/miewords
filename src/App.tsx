@@ -1,13 +1,30 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { BuiltInWord, wordsForList } from './data/builtInWords'
-import { Word, wordDatabase } from './lib/db'
+import {
+  AppSettings,
+  DEFAULT_LIST_ID,
+  MieWordsBackup,
+  PersonalList,
+  ReviewProgress,
+  Word,
+  initializePersonalData,
+  listDatabase,
+  progressDatabase,
+  settingsDatabase,
+  wordDatabase,
+} from './lib/db'
 
 type View = 'add' | 'library' | 'dictation'
-type Library = 'mine' | 'GRE' | 'TOEFL'
+type Rating = 'known' | 'unknown'
 type QuizWord = Pick<Word, 'id' | 'english' | 'chinese'>
 
-const alphabetic = <T extends { english: string }>(words: T[]) =>
-  [...words].sort((a, b) => a.english.localeCompare(b.english, 'en', { sensitivity: 'base' }))
+const GRE_SOURCE = 'builtin:GRE'
+const TOEFL_SOURCE = 'builtin:TOEFL'
+const personalSource = (id: string) => `personal:${id}`
+const personalId = (source: string) => source.replace('personal:', '')
+
+const alphabetic = <T extends { english: string }>(items: T[]) =>
+  [...items].sort((a, b) => a.english.localeCompare(b.english, 'en', { sensitivity: 'base' }))
 
 const shuffle = <T,>(items: T[]) => {
   const result = [...items]
@@ -18,129 +35,291 @@ const shuffle = <T,>(items: T[]) => {
   return result
 }
 
-const makePersonalWord = (word: BuiltInWord): Word => ({
-  id: crypto.randomUUID(),
-  english: word.english,
-  chinese: word.chinese,
-  createdAt: Date.now(),
-  reviewCount: 0,
-  knownCount: 0,
-})
+const timestamp = () => Date.now()
+const unique = <T,>(items: T[]) => [...new Set(items)]
 
 function App() {
   const [words, setWords] = useState<Word[]>([])
+  const [lists, setLists] = useState<PersonalList[]>([])
+  const [progressRecords, setProgressRecords] = useState<ReviewProgress[]>([])
+  const [settings, setSettings] = useState<AppSettings>({ id: 'settings', activeListId: DEFAULT_LIST_ID })
+  const [ready, setReady] = useState(false)
   const [view, setView] = useState<View>('add')
-  const [library, setLibrary] = useState<Library | null>(null)
-  const [quizSource, setQuizSource] = useState<Library | null>(null)
+  const [selectedSource, setSelectedSource] = useState<string | null>(null)
   const [english, setEnglish] = useState('')
   const [chinese, setChinese] = useState('')
+  const [chineseTouched, setChineseTouched] = useState(false)
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [quizSource, setQuizSource] = useState<string | null>(null)
   const [quiz, setQuiz] = useState<QuizWord[]>([])
   const [revealed, setRevealed] = useState<Set<string>>(new Set())
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [ratings, setRatings] = useState<Record<string, Rating>>({})
   const englishInput = useRef<HTMLInputElement>(null)
+  const ratingLock = useRef(false)
+  const [ratingSaving, setRatingSaving] = useState(false)
 
-  const refresh = async () => setWords(alphabetic(await wordDatabase.getAll()))
+  const loadData = async () => {
+    const data = await initializePersonalData()
+    setWords(alphabetic(data.words))
+    setLists(data.lists)
+    setSettings(data.settings)
+    setProgressRecords(data.progress)
+    setReady(true)
+  }
 
   useEffect(() => {
-    void wordDatabase.getAll().then((savedWords) => setWords(alphabetic(savedWords)))
+    void initializePersonalData().then((data) => {
+      setWords(alphabetic(data.words))
+      setLists(data.lists)
+      setSettings(data.settings)
+      setProgressRecords(data.progress)
+      setReady(true)
+    })
   }, [])
-
-  const personalEnglish = useMemo(
-    () => new Set(words.map((word) => word.english.toLocaleLowerCase())),
-    [words],
-  )
-
-  const libraryWords = useMemo(() => {
-    if (library === 'mine') return words
-    if (library === 'GRE' || library === 'TOEFL') return alphabetic(wordsForList(library))
-    return []
-  }, [library, words])
-
-  const visibleWords = useMemo(() => {
-    const term = search.trim().toLocaleLowerCase()
-    if (!term) return libraryWords
-    return libraryWords.filter((word) =>
-      `${word.english} ${word.chinese}`.toLocaleLowerCase().includes(term),
-    )
-  }, [libraryWords, search])
 
   const notify = (text: string) => {
     setMessage(text)
     window.setTimeout(() => setMessage(''), 2400)
   }
 
+  const activeList = lists.find((list) => list.id === settings.activeListId) ?? lists[0]
+  const personalEnglish = useMemo(
+    () => new Map(words.map((word) => [word.english.toLocaleLowerCase(), word])),
+    [words],
+  )
+
+  const getSourceWords = (source: string | null): QuizWord[] => {
+    if (!source) return []
+    if (source === GRE_SOURCE) return wordsForList('GRE')
+    if (source === TOEFL_SOURCE) return wordsForList('TOEFL')
+    const list = lists.find((item) => item.id === personalId(source))
+    if (!list) return []
+    const wordIds = new Set(list.wordIds)
+    return words.filter((word) => wordIds.has(word.id))
+  }
+
+  const sourceName = (source: string | null) => {
+    if (source === GRE_SOURCE) return 'GRE（镇考 3000 词）'
+    if (source === TOEFL_SOURCE) return 'TOEFL（ECDICT 词库）'
+    return lists.find((list) => list.id === personalId(source ?? ''))?.name ?? ''
+  }
+
+  const selectedWords = useMemo(
+    () => alphabetic(getSourceWords(selectedSource)),
+    // getSourceWords is intentionally derived from these state values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selectedSource, lists, words],
+  )
+
+  const visibleWords = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase()
+    if (!term) return selectedWords
+    return selectedWords.filter((word) =>
+      `${word.english} ${word.chinese}`.toLocaleLowerCase().includes(term),
+    )
+  }, [search, selectedWords])
+
+  const setActiveList = async (listId: string) => {
+    const next = { id: 'settings' as const, activeListId: listId }
+    await settingsDatabase.save(next)
+    setSettings(next)
+  }
+
+  const handleEnglishChange = (value: string) => {
+    setEnglish(value)
+    const existing = personalEnglish.get(value.trim().toLocaleLowerCase())
+    if (existing && !chineseTouched) setChinese(existing.chinese)
+    if (!existing && !chineseTouched) setChinese('')
+  }
+
+  const resetForm = () => {
+    setEnglish('')
+    setChinese('')
+    setChineseTouched(false)
+    setEditingId(null)
+  }
+
   const saveWord = async (event: FormEvent) => {
     event.preventDefault()
     const cleanEnglish = english.trim()
     const cleanChinese = chinese.trim()
-    if (!cleanEnglish || !cleanChinese) return notify('请完整填写英文和中文。')
+    if (!cleanEnglish || !cleanChinese || !activeList) return notify('请完整填写英文和中文。')
 
-    const duplicate = words.find(
-      (word) => word.english.toLocaleLowerCase() === cleanEnglish.toLocaleLowerCase() && word.id !== editingId,
-    )
+    const duplicate = personalEnglish.get(cleanEnglish.toLocaleLowerCase())
     const existing = editingId ? words.find((word) => word.id === editingId) : duplicate
-    await wordDatabase.save({
+    const word: Word = {
       id: existing?.id ?? crypto.randomUUID(),
       english: cleanEnglish,
       chinese: cleanChinese,
-      createdAt: existing?.createdAt ?? Date.now(),
+      createdAt: existing?.createdAt ?? timestamp(),
       reviewCount: existing?.reviewCount ?? 0,
       knownCount: existing?.knownCount ?? 0,
-    })
-    await refresh()
-    setEnglish('')
-    setChinese('')
-    setEditingId(null)
-    notify(duplicate ? '已更新这个单词的释义。' : editingId ? '修改已保存。' : '已保存到我的词库。')
+    }
+    await wordDatabase.save(word)
+    if (!editingId && !activeList.wordIds.includes(word.id)) {
+      await listDatabase.save({ ...activeList, wordIds: [...activeList.wordIds, word.id] })
+    }
+    await loadData()
+    resetForm()
+    notify(editingId ? '修改已保存。' : existing ? `已更新并加入“${activeList.name}”。` : `已保存到“${activeList.name}”。`)
     englishInput.current?.focus()
   }
 
-  const collectWord = async (word: BuiltInWord) => {
-    if (personalEnglish.has(word.english.toLocaleLowerCase())) return notify('这个单词已经在你的词库里。')
-    await wordDatabase.save(makePersonalWord(word))
-    await refresh()
-    notify(`已将 ${word.english} 加入我的词库。`)
+  const createList = async () => {
+    const name = window.prompt('新词库叫什么名字？')?.trim()
+    if (!name) return
+    if (lists.some((list) => list.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return notify('已经有同名词库。')
+    const list: PersonalList = { id: crypto.randomUUID(), name, wordIds: [], createdAt: timestamp() }
+    await listDatabase.save(list)
+    await setActiveList(list.id)
+    await loadData()
+    notify(`已创建“${name}”，之后的新单词会保存到这里。`)
+  }
+
+  const renameList = async (list: PersonalList) => {
+    const name = window.prompt('输入新的词库名称', list.name)?.trim()
+    if (!name || name === list.name) return
+    if (lists.some((item) => item.id !== list.id && item.name.toLocaleLowerCase() === name.toLocaleLowerCase())) return notify('已经有同名词库。')
+    await listDatabase.save({ ...list, name })
+    await loadData()
+  }
+
+  const deleteList = async (list: PersonalList) => {
+    if (list.id === DEFAULT_LIST_ID) return notify('默认词库不能删除。')
+    if (!window.confirm(`确定删除“${list.name}”吗？其中没有其他归属的单词会移入默认词库。`)) return
+    const defaultList = lists.find((item) => item.id === DEFAULT_LIST_ID)
+    if (!defaultList) return
+    const otherIds = new Set(lists.filter((item) => item.id !== list.id).flatMap((item) => item.wordIds))
+    const orphans = list.wordIds.filter((id) => !otherIds.has(id))
+    await listDatabase.save({ ...defaultList, wordIds: unique([...defaultList.wordIds, ...orphans]) })
+    await listDatabase.remove(list.id)
+    if (settings.activeListId === list.id) await setActiveList(DEFAULT_LIST_ID)
+    setSelectedSource(null)
+    await loadData()
+    notify('词库已删除。')
+  }
+
+  const addToActiveList = async (word: BuiltInWord) => {
+    if (!activeList) return
+    let personalWord = personalEnglish.get(word.english.toLocaleLowerCase())
+    if (!personalWord) {
+      personalWord = {
+        id: crypto.randomUUID(), english: word.english, chinese: word.chinese,
+        createdAt: timestamp(), reviewCount: 0, knownCount: 0,
+      }
+      await wordDatabase.save(personalWord)
+    }
+    if (activeList.wordIds.includes(personalWord.id)) return notify(`已经在“${activeList.name}”中。`)
+    await listDatabase.save({ ...activeList, wordIds: [...activeList.wordIds, personalWord.id] })
+    await loadData()
+    notify(`已收藏到“${activeList.name}”。`)
   }
 
   const beginEdit = (word: Word) => {
     setEditingId(word.id)
     setEnglish(word.english)
     setChinese(word.chinese)
+    setChineseTouched(false)
     setView('add')
     window.setTimeout(() => englishInput.current?.focus(), 0)
   }
 
-  const deleteWord = async (word: Word) => {
-    if (!window.confirm(`确定从我的词库删除 “${word.english}” 吗？`)) return
-    await wordDatabase.remove(word.id)
-    await refresh()
-    notify('单词已删除。')
+  const removeFromList = async (word: Word, list: PersonalList) => {
+    if (!window.confirm(`确定从“${list.name}”移除 “${word.english}” 吗？`)) return
+    await listDatabase.save({ ...list, wordIds: list.wordIds.filter((id) => id !== word.id) })
+    const existsElsewhere = lists.some((item) => item.id !== list.id && item.wordIds.includes(word.id))
+    if (!existsElsewhere) await wordDatabase.remove(word.id)
+    await loadData()
+    notify('单词已移除。')
   }
 
-  const sourceWords = (source: Library): QuizWord[] => {
-    if (source === 'mine') return words
-    return wordsForList(source)
+  const reconciledProgress = (source: string, sourceWords: QuizWord[], restart = false, nextRound = false) => {
+    const ids = sourceWords.map((word) => word.id)
+    const valid = new Set(ids)
+    const previous = progressRecords.find((item) => item.id === source)
+    if (!previous || restart || nextRound) {
+      return {
+        id: source,
+        round: nextRound ? (previous?.round ?? 0) + 1 : previous?.round ?? 1,
+        queue: shuffle(ids),
+        passed: [],
+        stats: previous?.stats ?? {},
+      } satisfies ReviewProgress
+    }
+    const passed = previous.passed.filter((id) => valid.has(id))
+    const accounted = new Set([...passed, ...previous.queue])
+    const additions = shuffle(ids.filter((id) => !accounted.has(id)))
+    return {
+      ...previous,
+      passed,
+      queue: [...previous.queue.filter((id) => valid.has(id) && !passed.includes(id)), ...additions],
+    }
   }
 
-  const startQuiz = (source: Library) => {
-    setQuizSource(source)
-    setQuiz(shuffle(sourceWords(source)).slice(0, 10))
+  const showGroup = (progress: ReviewProgress, sourceWords: QuizWord[]) => {
+    const byId = new Map(sourceWords.map((word) => [word.id, word]))
+    setQuiz(progress.queue.slice(0, 10).flatMap((id) => byId.get(id) ?? []))
     setRevealed(new Set())
+    setRatings({})
   }
 
-  const openDictation = () => {
-    setView('dictation')
-    setQuizSource(null)
-    setQuiz([])
+  const beginReview = async (source: string, mode: 'continue' | 'restart' | 'next' = 'continue') => {
+    const sourceWords = getSourceWords(source)
+    const progress = reconciledProgress(source, sourceWords, mode === 'restart', mode === 'next')
+    await progressDatabase.save(progress)
+    setProgressRecords((current) => [...current.filter((item) => item.id !== source), progress])
+    setQuizSource(source)
+    showGroup(progress, sourceWords)
+  }
+
+  const rateWord = async (wordId: string, rating: Rating) => {
+    if (!quizSource || ratings[wordId] || ratingLock.current) return
+    const progress = progressRecords.find((item) => item.id === quizSource)
+    if (!progress) return
+    ratingLock.current = true
+    setRatingSaving(true)
+    const queue = progress.queue.filter((id) => id !== wordId)
+    const stats = progress.stats[wordId] ?? { knownCount: 0, unknownCount: 0, lastReviewedAt: 0 }
+    const next: ReviewProgress = {
+      ...progress,
+      queue: rating === 'unknown' ? [wordId, ...queue] : queue,
+      passed: rating === 'known' ? unique([...progress.passed, wordId]) : progress.passed,
+      stats: {
+        ...progress.stats,
+        [wordId]: {
+          knownCount: stats.knownCount + (rating === 'known' ? 1 : 0),
+          unknownCount: stats.unknownCount + (rating === 'unknown' ? 1 : 0),
+          lastReviewedAt: timestamp(),
+        },
+      },
+    }
+    try {
+      await progressDatabase.save(next)
+      setProgressRecords((current) => [...current.filter((item) => item.id !== quizSource), next])
+      setRatings((current) => ({ ...current, [wordId]: rating }))
+    } finally {
+      ratingLock.current = false
+      setRatingSaving(false)
+    }
+  }
+
+  const nextGroup = () => {
+    if (!quizSource) return
+    const progress = progressRecords.find((item) => item.id === quizSource)
+    if (progress) showGroup(progress, getSourceWords(quizSource))
+  }
+
+  const restartRound = async () => {
+    if (!quizSource || !window.confirm('确定重新开始当前轮次吗？本轮进度会清零并重新打乱，累计历史记录会保留。')) return
+    await beginReview(quizSource, 'restart')
   }
 
   const toggleAnswer = (id: string) => {
     setRevealed((current) => {
       const next = new Set(current)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      next.add(id)
       return next
     })
   }
@@ -154,27 +333,39 @@ function App() {
     URL.revokeObjectURL(url)
   }
 
-  const exportJson = () => download(JSON.stringify(words, null, 2), 'miewords-backup.json', 'application/json')
+  const exportJson = () => {
+    const backup: MieWordsBackup = { version: 2, words, lists, progress: progressRecords, settings }
+    download(JSON.stringify(backup, null, 2), 'miewords-backup.json', 'application/json')
+  }
+
   const exportCsv = () => {
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
-    const csv = ['English,Chinese', ...words.map((word) => `${quote(word.english)},${quote(word.chinese)}`)].join('\n')
-    download(`\uFEFF${csv}`, 'miewords.csv', 'text/csv;charset=utf-8')
+    const rows = lists.flatMap((list) => list.wordIds.flatMap((id) => {
+      const word = words.find((item) => item.id === id)
+      return word ? [`${quote(list.name)},${quote(word.english)},${quote(word.chinese)}`] : []
+    }))
+    download(`\uFEFF${['List,English,Chinese', ...rows].join('\n')}`, 'miewords.csv', 'text/csv;charset=utf-8')
   }
 
   const importJson = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
     try {
-      const incoming = JSON.parse(await file.text()) as Word[]
-      if (!Array.isArray(incoming) || incoming.some((word) => !word.english || !word.chinese)) throw new Error()
-      for (const item of incoming) {
-        await wordDatabase.save({
-          id: item.id || crypto.randomUUID(), english: item.english.trim(), chinese: item.chinese.trim(),
-          createdAt: item.createdAt || Date.now(), reviewCount: item.reviewCount || 0, knownCount: item.knownCount || 0,
-        })
+      const incoming = JSON.parse(await file.text()) as MieWordsBackup | Word[]
+      if (Array.isArray(incoming)) {
+        if (incoming.some((word) => !word.english || !word.chinese)) throw new Error()
+        const defaultList = lists.find((list) => list.id === DEFAULT_LIST_ID) ?? lists[0]
+        for (const word of incoming) await wordDatabase.save(word)
+        await listDatabase.save({ ...defaultList, wordIds: unique([...defaultList.wordIds, ...incoming.map((word) => word.id)]) })
+      } else {
+        if (incoming.version !== 2 || !Array.isArray(incoming.words) || !Array.isArray(incoming.lists)) throw new Error()
+        for (const word of incoming.words) await wordDatabase.save(word)
+        for (const list of incoming.lists) await listDatabase.save(list)
+        for (const progress of incoming.progress ?? []) await progressDatabase.save(progress)
+        if (incoming.settings) await settingsDatabase.save(incoming.settings)
       }
-      await refresh()
-      notify(`成功导入 ${incoming.length} 个单词。`)
+      await loadData()
+      notify('备份导入成功。')
     } catch {
       notify('无法导入：请选择有效的 MieWords JSON 备份。')
     } finally {
@@ -182,18 +373,20 @@ function App() {
     }
   }
 
-  const openLibrary = () => {
-    setView('library')
-    setLibrary(null)
-    setSearch('')
-  }
+  const openLibrary = () => { setView('library'); setSelectedSource(null); setSearch('') }
+  const openDictation = () => { setView('dictation'); setQuizSource(null); setQuiz([]) }
+  const currentProgress = progressRecords.find((item) => item.id === quizSource)
+  const quizTotal = getSourceWords(quizSource).length
+  const selectedPersonalList = selectedSource?.startsWith('personal:')
+    ? lists.find((list) => list.id === personalId(selectedSource))
+    : undefined
 
-  const libraryName = library === 'mine' ? '我的词库' : library === 'GRE' ? 'GRE（镇考 3000 词）' : 'TOEFL（ECDICT 词库）'
+  if (!ready) return <div className="loading">MieWords</div>
 
   return (
     <div className="app-shell">
       <header>
-        <button className="brand" onClick={() => setView('add')} aria-label="返回首页">MieWords</button>
+        <button className="brand" onClick={() => setView('add')}>MieWords</button>
         <nav aria-label="主菜单">
           <button className={view === 'add' ? 'active' : ''} onClick={() => setView('add')}>录入</button>
           <button className={view === 'library' ? 'active' : ''} onClick={openLibrary}>词库</button>
@@ -202,73 +395,70 @@ function App() {
       </header>
 
       <main>
-        {view === 'add' && (
-          <section className="hero">
-            <h1>{editingId ? '修改单词' : '添加单词'}</h1>
-            <p className="section-note">保存到我的词库</p>
-            <form className="word-form" onSubmit={saveWord}>
-              <label>英文<input ref={englishInput} value={english} onChange={(e) => setEnglish(e.target.value)} placeholder="e.g. serendipity" autoFocus /></label>
-              <label>中文<input value={chinese} onChange={(e) => setChinese(e.target.value)} placeholder="例如：意外发现美好事物的幸运" /></label>
-              <button className="primary" type="submit">{editingId ? '保存修改' : '保存'}</button>
-              {editingId && <button className="text-button" type="button" onClick={() => { setEditingId(null); setEnglish(''); setChinese('') }}>取消修改</button>}
-            </form>
-          </section>
-        )}
+        {view === 'add' && <section className="hero">
+          <h1>{editingId ? '修改单词' : '添加单词'}</h1>
+          <label className="destination">保存到
+            <select value={activeList?.id} onChange={(event) => void setActiveList(event.target.value)}>
+              {lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}
+            </select>
+          </label>
+          <form className="word-form" onSubmit={saveWord}>
+            <label>英文<input ref={englishInput} value={english} onChange={(event) => handleEnglishChange(event.target.value)} placeholder="e.g. serendipity" autoFocus /></label>
+            <label>中文<input value={chinese} onChange={(event) => { setChinese(event.target.value); setChineseTouched(true) }} placeholder="例如：意外发现美好事物的幸运" /></label>
+            <button className="primary" type="submit">{editingId ? '保存修改' : '保存'}</button>
+            {editingId && <button className="text-button" type="button" onClick={resetForm}>取消修改</button>}
+          </form>
+        </section>}
 
-        {view === 'library' && !library && (
-          <section className="panel">
-            <div className="panel-heading"><h1>词库</h1></div>
-            <div className="library-directory">
-              <button onClick={() => setLibrary('mine')}><span><strong>我的词库</strong><small>手动录入与收藏</small></span><em>{words.length}</em></button>
-              <button onClick={() => setLibrary('GRE')}><span><strong>GRE</strong><small>镇考 3000 词</small></span><em>{wordsForList('GRE').length}</em></button>
-              <button onClick={() => setLibrary('TOEFL')}><span><strong>TOEFL</strong><small>ECDICT 词库</small></span><em>{wordsForList('TOEFL').length}</em></button>
-            </div>
-            <p className="data-caption">内置词库为只读数据，收藏的单词会保存到你的个人词库。</p>
-          </section>
-        )}
+        {view === 'library' && !selectedSource && <section className="panel">
+          <div className="panel-heading"><h1>词库</h1><button className="quiet-button" onClick={() => void createList()}>＋ 新建词库</button></div>
+          <h2 className="group-title">我的词库</h2>
+          <div className="library-directory">
+            {lists.map((list) => <button key={list.id} onClick={() => setSelectedSource(personalSource(list.id))}><span><strong>{list.name}</strong>{list.id === activeList?.id && <small>正在录入</small>}</span><em>{list.wordIds.length}</em></button>)}
+          </div>
+          <h2 className="group-title built-in-title">内置词库</h2>
+          <div className="library-directory">
+            <button onClick={() => setSelectedSource(GRE_SOURCE)}><span><strong>GRE</strong><small>镇考 3000 词</small></span><em>{wordsForList('GRE').length}</em></button>
+            <button onClick={() => setSelectedSource(TOEFL_SOURCE)}><span><strong>TOEFL</strong><small>ECDICT 词库</small></span><em>{wordsForList('TOEFL').length}</em></button>
+          </div>
+        </section>}
 
-        {view === 'library' && library && (
-          <section className="panel">
-            <div className="panel-heading">
-              <div><button className="back-button" onClick={() => { setLibrary(null); setSearch('') }}>← 所有词库</button><h1>{libraryName}</h1></div>
-              {library === 'mine' && <details className="data-menu"><summary>数据</summary><div className="toolbar">
-                <button onClick={exportJson} disabled={!words.length}>导出 JSON</button>
-                <button onClick={exportCsv} disabled={!words.length}>导出 CSV</button>
-                <label className="import">导入 JSON<input type="file" accept="application/json,.json" onChange={importJson} /></label>
-              </div></details>}
-            </div>
-            <input className="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder={`搜索${libraryName}…`} />
-            {!visibleWords.length ? <div className="empty">{library === 'mine' ? '这里还是空的。' : '没有找到匹配的单词。'}</div> : (
-              <div className="word-list">
-                {visibleWords.map((word) => <article className="word-row" key={word.id}>
-                  <strong>{word.english}</strong><span className="meaning">{word.chinese}</span>
-                  {library === 'mine' ? <div><button onClick={() => beginEdit(word as Word)}>编辑</button><button className="danger" onClick={() => deleteWord(word as Word)}>删除</button></div> :
-                    <button className={`collect ${personalEnglish.has(word.english.toLocaleLowerCase()) ? 'collected' : ''}`} onClick={() => void collectWord(word as BuiltInWord)}>{personalEnglish.has(word.english.toLocaleLowerCase()) ? '已收藏' : '＋ 收藏'}</button>}
-                </article>)}
-              </div>
-            )}
-          </section>
-        )}
+        {view === 'library' && selectedSource && <section className="panel">
+          <div className="panel-heading">
+            <div><button className="back-button" onClick={() => { setSelectedSource(null); setSearch('') }}>← 所有词库</button><h1>{sourceName(selectedSource)}</h1></div>
+            {selectedPersonalList ? <div className="list-actions">
+              <button className="quiet-button" onClick={() => void setActiveList(selectedPersonalList.id)}>{activeList?.id === selectedPersonalList.id ? '正在录入' : '设为录入词库'}</button>
+              <button className="quiet-button" onClick={() => void renameList(selectedPersonalList)}>重命名</button>
+              {selectedPersonalList.id !== DEFAULT_LIST_ID && <button className="quiet-button danger" onClick={() => void deleteList(selectedPersonalList)}>删除词库</button>}
+              <details className="data-menu"><summary>数据</summary><div className="toolbar"><button onClick={exportJson}>导出 JSON</button><button onClick={exportCsv}>导出 CSV</button><label className="import">导入 JSON<input type="file" accept="application/json,.json" onChange={importJson} /></label></div></details>
+            </div> : <label className="collect-target">收藏到<select value={activeList?.id} onChange={(event) => void setActiveList(event.target.value)}>{lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>}
+          </div>
+          <input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`搜索${sourceName(selectedSource)}…`} />
+          {!visibleWords.length ? <div className="empty">这里还是空的。</div> : <div className="word-list">
+            {visibleWords.map((word) => <article className="word-row" key={word.id}><strong>{word.english}</strong><span className="meaning">{word.chinese}</span>
+              {selectedPersonalList ? <div><button onClick={() => beginEdit(word as Word)}>编辑</button><button className="danger" onClick={() => void removeFromList(word as Word, selectedPersonalList)}>移除</button></div> : (() => { const collected = activeList?.wordIds.some((id) => words.find((item) => item.id === id)?.english.toLocaleLowerCase() === word.english.toLocaleLowerCase()); return <button className={`collect ${collected ? 'collected' : ''}`} onClick={() => void addToActiveList(word as BuiltInWord)}>{collected ? '已收藏' : '＋ 收藏'}</button> })()}
+            </article>)}
+          </div>}
+        </section>}
 
-        {view === 'dictation' && !quizSource && (
-          <section className="panel quiz-panel">
-            <div className="panel-heading"><h1>选择词库</h1></div>
-            <div className="library-directory">
-              <button onClick={() => startQuiz('mine')}><span><strong>我的词库</strong></span><em>{words.length}</em></button>
-              <button onClick={() => startQuiz('GRE')}><span><strong>GRE</strong></span><em>{wordsForList('GRE').length}</em></button>
-              <button onClick={() => startQuiz('TOEFL')}><span><strong>TOEFL</strong></span><em>{wordsForList('TOEFL').length}</em></button>
-            </div>
-          </section>
-        )}
+        {view === 'dictation' && !quizSource && <section className="panel quiz-panel">
+          <div className="panel-heading"><h1>选择词库</h1></div>
+          <div className="library-directory">
+            {lists.map((list) => { const progress = progressRecords.find((item) => item.id === personalSource(list.id)); return <button key={list.id} onClick={() => void beginReview(personalSource(list.id))}><span><strong>{list.name}</strong><small>{progress ? `第 ${progress.round} 轮` : '尚未开始'}</small></span><em>{progress?.passed.length ?? 0} / {list.wordIds.length}</em></button> })}
+            {[GRE_SOURCE, TOEFL_SOURCE].map((source) => { const progress = progressRecords.find((item) => item.id === source); const total = getSourceWords(source).length; return <button key={source} onClick={() => void beginReview(source)}><span><strong>{sourceName(source)}</strong><small>{progress ? `第 ${progress.round} 轮` : '尚未开始'}</small></span><em>{progress?.passed.length ?? 0} / {total}</em></button> })}
+          </div>
+        </section>}
 
-        {view === 'dictation' && quizSource && (
-          <section className="panel quiz-panel">
-            <div className="panel-heading"><div><button className="back-button" onClick={() => { setQuizSource(null); setQuiz([]) }}>← 选择词库</button><h1>默写 · {quizSource === 'mine' ? '我的词库' : quizSource === 'GRE' ? 'GRE（镇考 3000 词）' : 'TOEFL（ECDICT 词库）'}</h1><p>点击英文查看释义</p></div><button className="quiet-button" onClick={() => startQuiz(quizSource)}>换一组</button></div>
-            {!quiz.length ? <div className="empty">这个词库还是空的。</div> : <div className="quiz-list">{quiz.map((word, index) => <button className={`quiz-row ${revealed.has(word.id) ? 'revealed' : ''}`} onClick={() => toggleAnswer(word.id)} key={word.id}>
-              <span>{String(index + 1).padStart(2, '0')}</span><strong>{word.english}</strong><em>{revealed.has(word.id) ? word.chinese : ''}</em>
-            </button>)}</div>}
-          </section>
-        )}
+        {view === 'dictation' && quizSource && <section className="panel quiz-panel">
+          <div className="panel-heading"><div><button className="back-button" onClick={() => { setQuizSource(null); setQuiz([]) }}>← 选择词库</button><h1>默写 · {sourceName(quizSource)}</h1><p>第 {currentProgress?.round ?? 1} 轮 · {currentProgress?.passed.length ?? 0} / {quizTotal}</p></div><button className="quiet-button" onClick={() => void restartRound()}>重新开始本轮</button></div>
+          {!quizTotal ? <div className="empty">这个词库还是空的。</div> : currentProgress?.queue.length === 0 ? <div className="round-complete"><p>这一轮完成了。</p><button className="primary" onClick={() => void beginReview(quizSource, 'next')}>开始下一轮</button></div> : <>
+            <div className="quiz-list">{quiz.map((word, index) => <div className={`quiz-row ${revealed.has(word.id) ? 'revealed' : ''}`} key={word.id}>
+              <button className="quiz-word" onClick={() => toggleAnswer(word.id)}><span>{String(index + 1).padStart(2, '0')}</span><strong>{word.english}</strong><em>{revealed.has(word.id) ? word.chinese : ''}</em></button>
+              {revealed.has(word.id) && <div className="rating"><button className={ratings[word.id] === 'unknown' ? 'selected' : ''} disabled={ratingSaving || Boolean(ratings[word.id])} onClick={() => void rateWord(word.id, 'unknown')}>不认识</button><button className={ratings[word.id] === 'known' ? 'selected' : ''} disabled={ratingSaving || Boolean(ratings[word.id])} onClick={() => void rateWord(word.id, 'known')}>认识</button></div>}
+            </div>)}</div>
+            <div className="quiz-footer"><span>{Object.keys(ratings).length} / {quiz.length} 已选择</span><button className="primary" disabled={ratingSaving} onClick={nextGroup}>下一组</button></div>
+          </>}
+        </section>}
       </main>
       {message && <div className="toast" role="status">{message}</div>}
     </div>
