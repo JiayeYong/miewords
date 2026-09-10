@@ -563,7 +563,8 @@ function App() {
           </button>
           <div className="card-controls">
             <button disabled={cardIndex === 0} onClick={() => moveCard(-1)}>← 上一个</button>
-            <button onClick={() => void saveCardPosition(0)} disabled={cardIndex === 0}>回到第一张</button>
+            <button onClick={() => void saveCardPosition(0)} disabled={cardIndex === 0}>第一张</button>
+            <button onClick={() => void saveCardPosition(cardWords.length - 1)} disabled={cardIndex === cardWords.length - 1}>最后一张</button>
             <button disabled={cardIndex === cardWords.length - 1} onClick={() => moveCard(1)}>下一个 →</button>
           </div>
           <p className="keyboard-hint">空格翻面 · 方向键切换</p>
