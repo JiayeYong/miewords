@@ -1,64 +1,42 @@
 # MieWords
 
-> A tiny vocabulary garden for growing words.
+MieWords is a minimal English–Chinese vocabulary tool for collecting words, organizing personal word lists, and reviewing GRE and TOEFL vocabulary. It runs directly in your browser and keeps your personal data on your device.
 
-MieWords 是一个轻量、隐私友好的个人单词工具。录入英文和中文释义，整理自己的词库，再通过个人复习和内置单词卡持续背诵。
+## 立即使用
 
-## Features
+最快捷的方法：打开 **[MieWords 在线版](https://jiayeyong.github.io/miewords/)**，无需安装或登录。建议将页面加入浏览器书签，之后可以直接打开。
 
-- 英文与中文释义快速录入
-- 可新建、重命名和删除的个人词库
-- 自动记住上一次录入目标，从个人及内置词库补全中文释义
-- 录入时可从 GRE、TOEFL 内置词库自动补全释义，个人修改不影响原词库
-- 同一个个人单词可以加入多个词库
-- 分开的个人词库与只读内置词库
-- 从 GRE（镇考 3000 词）、TOEFL（ECDICT 词库）收藏到个人词库
-- 按英文字母顺序排列的可搜索词表
-- 编辑、删除与重复单词更新
-- 个人词库使用独立的无重复随机遍历进度
-- 个人复习中点击揭晓释义后选择“认识 / 不认识”，难词优先再次出现
-- 支持重新开始当前轮次并保留累计学习记录
-- 内置词库使用固定随机的百词分组与逐张翻阅单词卡
-- 内置词卡支持键盘操作，并记住每组最后停留位置
-- 内置词库稳定随机分成每组 100 词，以可翻面的单词卡浏览
-- 可自由选择内置词组，并记住每组上次停留的位置
-- IndexedDB 本地保存，不上传个人词库
-- JSON 备份导入与导出、CSV 导出
-- 响应式界面，支持桌面与移动设备
+## 使用方法
 
-## Local development
+### 录入
+
+输入英文单词和中文释义，选择保存到哪个个人词库。输入已经收录的单词时，MieWords 会尝试从个人词库、GRE 或 TOEFL 词库自动填写中文，你可以在保存前修改。
+
+### 词库
+
+- 新建、重命名和管理自己的词库。
+- 搜索个人词库及内置 GRE、TOEFL 词库。
+- 将内置词库中的单词收藏到自己的词库。
+- 通过“数据”菜单导入或导出个人数据。
+
+### 背诵
+
+- **个人词库：** 每组复习十个单词；选择“认识”后计入本轮完成，选择“不认识”会优先再次出现。
+- **内置词库：** 每 100 个单词为一组，选择任意 List 后逐张翻阅词卡。点击或按空格翻面，使用方向键切换。
+
+## 数据保存
+
+个人单词、词库和复习记录只保存在当前浏览器中。正常关闭页面或重启电脑不会丢失，但清除浏览器数据、更换浏览器或设备时不会自动同步。
+
+建议定期进入 `词库 → 默认词库 → 数据`，选择 **导出 JSON** 进行备份；需要恢复时选择 **导入 JSON**。
+
+## 本地运行
 
 ```bash
 npm install
 npm run dev
 ```
 
-生产构建：
-
-```bash
-npm run build
-```
-
-## Deployment
-
-项目包含 GitHub Pages 自动发布工作流。将仓库公开并在仓库的
-`Settings → Pages → Build and deployment` 中选择 **GitHub Actions** 后，
-每次推送到 `main` 分支都会自动构建并发布。
-
-默认项目地址为 `https://<username>.github.io/miewords/`。
-
-## Privacy
-
-所有个人词汇、词库关系、个人复习进度和内置词卡位置均保存在当前浏览器的 IndexedDB 中。清理浏览器数据前，请先导出 JSON 备份。
-
-## Roadmap
-
-- 更细致的学习统计与薄弱词专用复习
-- CSV 导入
-- 多语言界面
-- 可选的跨设备同步
-- Mie 小羊品牌形象
-
 ## License
 
-[MIT](LICENSE) © Mie
+[MIT](LICENSE) © Mie · [Third-party notices](THIRD_PARTY_NOTICES.md)
