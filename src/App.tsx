@@ -1,4 +1,4 @@
-import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { BuiltInWord, wordsForList } from './data/builtInWords'
 import {
   AppSettings,
@@ -17,6 +17,8 @@ import {
 type View = 'add' | 'library' | 'dictation'
 type Rating = 'known' | 'unknown'
 type QuizWord = Pick<Word, 'id' | 'english' | 'chinese'>
+type BuiltInSource = typeof GRE_SOURCE | typeof TOEFL_SOURCE
+type CardSession = { source: BuiltInSource; groupIndex: number }
 
 const GRE_SOURCE = 'builtin:GRE'
 const TOEFL_SOURCE = 'builtin:TOEFL'
@@ -35,6 +37,23 @@ const shuffle = <T,>(items: T[]) => {
   return result
 }
 
+const seededShuffle = <T,>(items: T[], seedText: string) => {
+  let seed = [...seedText].reduce((value, character) => Math.imul(value ^ character.charCodeAt(0), 16777619), 2166136261)
+  const random = () => {
+    seed += 0x6d2b79f5
+    let value = seed
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+  const result = [...items]
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1))
+    ;[result[index], result[target]] = [result[target], result[index]]
+  }
+  return result
+}
+
 const timestamp = () => Date.now()
 const unique = <T,>(items: T[]) => [...new Set(items)]
 
@@ -42,13 +61,14 @@ function App() {
   const [words, setWords] = useState<Word[]>([])
   const [lists, setLists] = useState<PersonalList[]>([])
   const [progressRecords, setProgressRecords] = useState<ReviewProgress[]>([])
-  const [settings, setSettings] = useState<AppSettings>({ id: 'settings', activeListId: DEFAULT_LIST_ID })
+  const [settings, setSettings] = useState<AppSettings>({ id: 'settings', activeListId: DEFAULT_LIST_ID, builtInPositions: {} })
   const [ready, setReady] = useState(false)
   const [view, setView] = useState<View>('add')
   const [selectedSource, setSelectedSource] = useState<string | null>(null)
   const [english, setEnglish] = useState('')
   const [chinese, setChinese] = useState('')
   const [chineseTouched, setChineseTouched] = useState(false)
+  const [suggestionSource, setSuggestionSource] = useState('')
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState('')
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -59,6 +79,10 @@ function App() {
   const englishInput = useRef<HTMLInputElement>(null)
   const ratingLock = useRef(false)
   const [ratingSaving, setRatingSaving] = useState(false)
+  const [groupSelections, setGroupSelections] = useState<Record<BuiltInSource, number>>({ [GRE_SOURCE]: 0, [TOEFL_SOURCE]: 0 })
+  const [cardSession, setCardSession] = useState<CardSession | null>(null)
+  const [cardIndex, setCardIndex] = useState(0)
+  const [cardFlipped, setCardFlipped] = useState(false)
 
   const loadData = async () => {
     const data = await initializePersonalData()
@@ -89,6 +113,12 @@ function App() {
     () => new Map(words.map((word) => [word.english.toLocaleLowerCase(), word])),
     [words],
   )
+  const builtInDecks = useMemo<Record<BuiltInSource, BuiltInWord[]>>(() => ({
+    [GRE_SOURCE]: seededShuffle(wordsForList('GRE'), 'miewords-gre-v1'),
+    [TOEFL_SOURCE]: seededShuffle(wordsForList('TOEFL'), 'miewords-toefl-v1'),
+  }), [])
+  const greEnglish = useMemo(() => new Map(wordsForList('GRE').map((word) => [word.english.toLocaleLowerCase(), word])), [])
+  const toeflEnglish = useMemo(() => new Map(wordsForList('TOEFL').map((word) => [word.english.toLocaleLowerCase(), word])), [])
 
   const getSourceWords = (source: string | null): QuizWord[] => {
     if (!source) return []
@@ -122,22 +152,30 @@ function App() {
   }, [search, selectedWords])
 
   const setActiveList = async (listId: string) => {
-    const next = { id: 'settings' as const, activeListId: listId }
+    const next = { ...settings, id: 'settings' as const, activeListId: listId }
     await settingsDatabase.save(next)
     setSettings(next)
   }
 
   const handleEnglishChange = (value: string) => {
     setEnglish(value)
-    const existing = personalEnglish.get(value.trim().toLocaleLowerCase())
-    if (existing && !chineseTouched) setChinese(existing.chinese)
-    if (!existing && !chineseTouched) setChinese('')
+    const key = value.trim().toLocaleLowerCase()
+    const existing = personalEnglish.get(key)
+    const greWord = greEnglish.get(key)
+    const toeflWord = toeflEnglish.get(key)
+    const match = existing ?? greWord ?? toeflWord
+    if (!chineseTouched) setChinese(match?.chinese ?? '')
+    if (existing) setSuggestionSource('来自你的个人词库')
+    else if (greWord) setSuggestionSource(toeflWord ? '来自 GRE · 同时收录于 TOEFL' : '来自 GRE')
+    else if (toeflWord) setSuggestionSource('来自 TOEFL')
+    else setSuggestionSource('')
   }
 
   const resetForm = () => {
     setEnglish('')
     setChinese('')
     setChineseTouched(false)
+    setSuggestionSource('')
     setEditingId(null)
   }
 
@@ -373,13 +411,56 @@ function App() {
     }
   }
 
+  const startCardStudy = (source: BuiltInSource) => {
+    const groupIndex = groupSelections[source]
+    const positionKey = `${source}:${groupIndex}`
+    const groupLength = Math.min(100, builtInDecks[source].length - groupIndex * 100)
+    const savedPosition = settings.builtInPositions?.[positionKey] ?? 0
+    setCardSession({ source, groupIndex })
+    setCardIndex(Math.min(savedPosition, Math.max(0, groupLength - 1)))
+    setCardFlipped(false)
+  }
+
+  const saveCardPosition = async (index: number) => {
+    if (!cardSession) return
+    const positionKey = `${cardSession.source}:${cardSession.groupIndex}`
+    const nextSettings: AppSettings = {
+      ...settings,
+      builtInPositions: { ...settings.builtInPositions, [positionKey]: index },
+    }
+    setCardIndex(index)
+    setCardFlipped(false)
+    setSettings(nextSettings)
+    await settingsDatabase.save(nextSettings)
+  }
+
+  const moveCard = (change: number) => {
+    if (!cardSession) return
+    const length = Math.min(100, builtInDecks[cardSession.source].length - cardSession.groupIndex * 100)
+    const next = Math.min(length - 1, Math.max(0, cardIndex + change))
+    if (next !== cardIndex) void saveCardPosition(next)
+  }
+
+  const handleCardKey = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === 'ArrowLeft') moveCard(-1)
+    else if (event.key === 'ArrowRight') moveCard(1)
+    else if (event.key === ' ') {
+      event.preventDefault()
+      setCardFlipped((value) => !value)
+    }
+  }
+
   const openLibrary = () => { setView('library'); setSelectedSource(null); setSearch('') }
-  const openDictation = () => { setView('dictation'); setQuizSource(null); setQuiz([]) }
+  const openDictation = () => { setView('dictation'); setQuizSource(null); setQuiz([]); setCardSession(null) }
   const currentProgress = progressRecords.find((item) => item.id === quizSource)
   const quizTotal = getSourceWords(quizSource).length
   const selectedPersonalList = selectedSource?.startsWith('personal:')
     ? lists.find((list) => list.id === personalId(selectedSource))
     : undefined
+  const cardWords = cardSession
+    ? builtInDecks[cardSession.source].slice(cardSession.groupIndex * 100, cardSession.groupIndex * 100 + 100)
+    : []
+  const currentCard = cardWords[cardIndex]
 
   if (!ready) return <div className="loading">MieWords</div>
 
@@ -390,7 +471,7 @@ function App() {
         <nav aria-label="主菜单">
           <button className={view === 'add' ? 'active' : ''} onClick={() => setView('add')}>录入</button>
           <button className={view === 'library' ? 'active' : ''} onClick={openLibrary}>词库</button>
-          <button className={view === 'dictation' ? 'active' : ''} onClick={openDictation}>默写</button>
+          <button className={view === 'dictation' ? 'active' : ''} onClick={openDictation}>背诵</button>
         </nav>
       </header>
 
@@ -403,7 +484,7 @@ function App() {
             </select>
           </label>
           <form className="word-form" onSubmit={saveWord}>
-            <label>英文<input ref={englishInput} value={english} onChange={(event) => handleEnglishChange(event.target.value)} placeholder="e.g. serendipity" autoFocus /></label>
+            <label>英文<input ref={englishInput} value={english} onChange={(event) => handleEnglishChange(event.target.value)} placeholder="e.g. serendipity" autoFocus />{suggestionSource && <small className="source-hint">{suggestionSource}</small>}</label>
             <label>中文<input value={chinese} onChange={(event) => { setChinese(event.target.value); setChineseTouched(true) }} placeholder="例如：意外发现美好事物的幸运" /></label>
             <button className="primary" type="submit">{editingId ? '保存修改' : '保存'}</button>
             {editingId && <button className="text-button" type="button" onClick={resetForm}>取消修改</button>}
@@ -425,7 +506,7 @@ function App() {
 
         {view === 'library' && selectedSource && <section className="panel">
           <div className="panel-heading">
-            <div><button className="back-button" onClick={() => { setSelectedSource(null); setSearch('') }}>← 所有词库</button><h1>{sourceName(selectedSource)}</h1></div>
+            <div><button className="back-button" onClick={() => { setSelectedSource(null); setSearch('') }}>← 所有词库</button><h1>词库</h1><p>{sourceName(selectedSource)}</p></div>
             {selectedPersonalList ? <div className="list-actions">
               <button className="quiet-button" onClick={() => void setActiveList(selectedPersonalList.id)}>{activeList?.id === selectedPersonalList.id ? '正在录入' : '设为录入词库'}</button>
               <button className="quiet-button" onClick={() => void renameList(selectedPersonalList)}>重命名</button>
@@ -441,16 +522,26 @@ function App() {
           </div>}
         </section>}
 
-        {view === 'dictation' && !quizSource && <section className="panel quiz-panel">
-          <div className="panel-heading"><h1>选择词库</h1></div>
+        {view === 'dictation' && !quizSource && !cardSession && <section className="panel study-home">
+          <div className="panel-heading"><h1>背诵</h1></div>
+          <h2 className="group-title">我的词库 · 复习</h2>
           <div className="library-directory">
             {lists.map((list) => { const progress = progressRecords.find((item) => item.id === personalSource(list.id)); return <button key={list.id} onClick={() => void beginReview(personalSource(list.id))}><span><strong>{list.name}</strong><small>{progress ? `第 ${progress.round} 轮` : '尚未开始'}</small></span><em>{progress?.passed.length ?? 0} / {list.wordIds.length}</em></button> })}
-            {[GRE_SOURCE, TOEFL_SOURCE].map((source) => { const progress = progressRecords.find((item) => item.id === source); const total = getSourceWords(source).length; return <button key={source} onClick={() => void beginReview(source)}><span><strong>{sourceName(source)}</strong><small>{progress ? `第 ${progress.round} 轮` : '尚未开始'}</small></span><em>{progress?.passed.length ?? 0} / {total}</em></button> })}
+          </div>
+          <h2 className="group-title built-in-title">内置词库 · 单词卡</h2>
+          <div className="deck-selectors">
+            {([GRE_SOURCE, TOEFL_SOURCE] as BuiltInSource[]).map((source) => <article key={source}>
+              <div><strong>{source === GRE_SOURCE ? 'GRE' : 'TOEFL'}</strong><small>{source === GRE_SOURCE ? '镇考 3000 词' : 'ECDICT 词库'}</small></div>
+              <select value={groupSelections[source]} onChange={(event) => setGroupSelections((current) => ({ ...current, [source]: Number(event.target.value) }))}>
+                {Array.from({ length: Math.ceil(builtInDecks[source].length / 100) }, (_, index) => { const start = index * 100 + 1; const end = Math.min(start + 99, builtInDecks[source].length); return <option value={index} key={index}>List {String(index + 1).padStart(2, '0')} · {start}–{end}</option> })}
+              </select>
+              <button className="primary" onClick={() => startCardStudy(source)}>开始背诵</button>
+            </article>)}
           </div>
         </section>}
 
-        {view === 'dictation' && quizSource && <section className="panel quiz-panel">
-          <div className="panel-heading"><div><button className="back-button" onClick={() => { setQuizSource(null); setQuiz([]) }}>← 选择词库</button><h1>默写 · {sourceName(quizSource)}</h1><p>第 {currentProgress?.round ?? 1} 轮 · {currentProgress?.passed.length ?? 0} / {quizTotal}</p></div><button className="quiet-button" onClick={() => void restartRound()}>重新开始本轮</button></div>
+        {view === 'dictation' && quizSource && !cardSession && <section className="panel quiz-panel">
+          <div className="panel-heading"><div><button className="back-button" onClick={() => { setQuizSource(null); setQuiz([]) }}>← 背诵</button><h1>复习</h1><p>{sourceName(quizSource)} · 第 {currentProgress?.round ?? 1} 轮 · {currentProgress?.passed.length ?? 0} / {quizTotal}</p></div><button className="quiet-button" onClick={() => void restartRound()}>重新开始本轮</button></div>
           {!quizTotal ? <div className="empty">这个词库还是空的。</div> : currentProgress?.queue.length === 0 ? <div className="round-complete"><p>这一轮完成了。</p><button className="primary" onClick={() => void beginReview(quizSource, 'next')}>开始下一轮</button></div> : <>
             <div className="quiz-list">{quiz.map((word, index) => <div className={`quiz-row ${revealed.has(word.id) ? 'revealed' : ''}`} key={word.id}>
               <button className="quiz-word" onClick={() => toggleAnswer(word.id)}><span>{String(index + 1).padStart(2, '0')}</span><strong>{word.english}</strong><em>{revealed.has(word.id) ? word.chinese : ''}</em></button>
@@ -458,6 +549,24 @@ function App() {
             </div>)}</div>
             <div className="quiz-footer"><span>{Object.keys(ratings).length} / {quiz.length} 已选择</span><button className="primary" disabled={ratingSaving} onClick={nextGroup}>下一组</button></div>
           </>}
+        </section>}
+
+        {view === 'dictation' && cardSession && currentCard && <section className="panel card-study" tabIndex={0} onKeyDown={handleCardKey} autoFocus>
+          <div className="card-study-heading">
+            <div><button className="back-button" onClick={() => setCardSession(null)}>← 背诵</button><h1>单词卡</h1><p>{sourceName(cardSession.source)} · List {String(cardSession.groupIndex + 1).padStart(2, '0')}</p></div>
+            <span>{cardIndex + 1} / {cardWords.length}</span>
+          </div>
+          <button className={`flashcard ${cardFlipped ? 'flipped' : ''}`} onClick={() => setCardFlipped((value) => !value)}>
+            <span>{cardFlipped ? '中文' : '英文'}</span>
+            <strong>{currentCard.english}</strong>
+            <p>{cardFlipped ? currentCard.chinese : '点击查看中文释义'}</p>
+          </button>
+          <div className="card-controls">
+            <button disabled={cardIndex === 0} onClick={() => moveCard(-1)}>← 上一个</button>
+            <button onClick={() => void saveCardPosition(0)} disabled={cardIndex === 0}>回到第一张</button>
+            <button disabled={cardIndex === cardWords.length - 1} onClick={() => moveCard(1)}>下一个 →</button>
+          </div>
+          <p className="keyboard-hint">空格翻面 · 方向键切换</p>
         </section>}
       </main>
       {message && <div className="toast" role="status">{message}</div>}

@@ -31,6 +31,7 @@ export type ReviewProgress = {
 export type AppSettings = {
   id: 'settings'
   activeListId: string
+  builtInPositions?: Record<string, number>
 }
 
 export type MieWordsBackup = {
@@ -135,7 +136,11 @@ export async function initializePersonalData() {
   const activeListId = lists.some((list) => list.id === savedSettings?.activeListId)
     ? savedSettings!.activeListId
     : lists[0].id
-  const settings: AppSettings = { id: 'settings', activeListId }
+  const settings: AppSettings = {
+    id: 'settings',
+    activeListId,
+    builtInPositions: savedSettings?.builtInPositions ?? {},
+  }
   if (savedSettings?.activeListId !== activeListId) await settingsDatabase.save(settings)
 
   return { words, lists, settings, progress }
