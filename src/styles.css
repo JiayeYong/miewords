@@ -332,6 +332,36 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .card-controls button:disabled { opacity: .35; cursor: default; }
 .keyboard-hint { margin: 14px 0 0; color: #a3a7a3; font-size: 11px; text-align: center; }
 
+.modal-backdrop {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(28, 39, 33, .28);
+  backdrop-filter: blur(3px);
+}
+.import-dialog {
+  width: min(440px, 100%);
+  padding: 34px;
+  border: 1px solid #dad9d1;
+  border-radius: 10px;
+  background: #fffef9;
+  box-shadow: 0 24px 70px rgba(25, 38, 31, .16);
+}
+.dialog-label { margin: 0 0 10px; color: #829087; font-size: 10px; letter-spacing: .12em; }
+.import-dialog h2 { margin: 0; font-size: 23px; font-weight: 500; }
+.dialog-file { margin: 9px 0 26px; overflow: hidden; color: #939a95; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.import-dialog dl { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; border-block: 1px solid #e2e1da; }
+.import-dialog dl div { padding: 18px 4px; text-align: center; }
+.import-dialog dt { color: #949b96; font-size: 11px; }
+.import-dialog dd { margin: 6px 0 0; color: #315d47; font-size: 22px; }
+.dialog-note { margin: 20px 0 28px; color: #727d76; font-size: 12px; line-height: 1.7; }
+.dialog-actions { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.dialog-actions button { width: 100%; min-height: 42px; }
+.dialog-actions .quiet-button { border: 1px solid #d6d6ce; border-radius: 4px; }
+
 .toast {
   position: fixed;
   left: 50%;

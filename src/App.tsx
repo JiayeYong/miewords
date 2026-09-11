@@ -1,5 +1,6 @@
 import { ChangeEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { BuiltInWord, wordsForList } from './data/builtInWords'
+import { CsvWord, parseWordCsv } from './lib/csv'
 import {
   AppSettings,
   DEFAULT_LIST_ID,
@@ -19,6 +20,15 @@ type Rating = 'known' | 'unknown'
 type QuizWord = Pick<Word, 'id' | 'english' | 'chinese'>
 type BuiltInSource = typeof GRE_SOURCE | typeof TOEFL_SOURCE
 type CardSession = { source: BuiltInSource; groupIndex: number }
+type CsvPreview = {
+  filename: string
+  listId: string
+  listName: string
+  words: CsvWord[]
+  newCount: number
+  existingCount: number
+  skipped: number
+}
 
 const GRE_SOURCE = 'builtin:GRE'
 const TOEFL_SOURCE = 'builtin:TOEFL'
@@ -83,6 +93,7 @@ function App() {
   const [cardSession, setCardSession] = useState<CardSession | null>(null)
   const [cardIndex, setCardIndex] = useState(0)
   const [cardFlipped, setCardFlipped] = useState(false)
+  const [csvPreview, setCsvPreview] = useState<CsvPreview | null>(null)
 
   const loadData = async () => {
     const data = await initializePersonalData()
@@ -411,6 +422,56 @@ function App() {
     }
   }
 
+  const previewCsv = async (event: ChangeEvent<HTMLInputElement>, targetList: PersonalList) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    try {
+      const parsed = parseWordCsv(await file.text())
+      if (!parsed.words.length) throw new Error('CSV 中没有可以导入的单词。')
+      const existingCount = parsed.words.filter((word) => personalEnglish.has(word.english.toLocaleLowerCase())).length
+      setCsvPreview({
+        filename: file.name,
+        listId: targetList.id,
+        listName: targetList.name,
+        words: parsed.words,
+        newCount: parsed.words.length - existingCount,
+        existingCount,
+        skipped: parsed.skipped,
+      })
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '无法读取这个 CSV 文件。')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const importCsv = async () => {
+    if (!csvPreview) return
+    const targetList = lists.find((list) => list.id === csvPreview.listId)
+    if (!targetList) return notify('目标词库不存在。')
+    const wordIds = new Set(targetList.wordIds)
+    for (const item of csvPreview.words) {
+      let word = personalEnglish.get(item.english.toLocaleLowerCase())
+      if (!word) {
+        word = {
+          id: crypto.randomUUID(),
+          english: item.english,
+          chinese: item.chinese,
+          createdAt: timestamp(),
+          reviewCount: 0,
+          knownCount: 0,
+        }
+        await wordDatabase.save(word)
+      }
+      wordIds.add(word.id)
+    }
+    await listDatabase.save({ ...targetList, wordIds: [...wordIds] })
+    const result = csvPreview
+    setCsvPreview(null)
+    await loadData()
+    notify(`已导入“${result.listName}”：新增 ${result.newCount} 个，复用 ${result.existingCount} 个。`)
+  }
+
   const startCardStudy = (source: BuiltInSource) => {
     const groupIndex = groupSelections[source]
     const positionKey = `${source}:${groupIndex}`
@@ -511,7 +572,7 @@ function App() {
               <button className="quiet-button" onClick={() => void setActiveList(selectedPersonalList.id)}>{activeList?.id === selectedPersonalList.id ? '正在录入' : '设为录入词库'}</button>
               <button className="quiet-button" onClick={() => void renameList(selectedPersonalList)}>重命名</button>
               {selectedPersonalList.id !== DEFAULT_LIST_ID && <button className="quiet-button danger" onClick={() => void deleteList(selectedPersonalList)}>删除词库</button>}
-              <details className="data-menu"><summary>数据</summary><div className="toolbar"><button onClick={exportJson}>导出 JSON</button><button onClick={exportCsv}>导出 CSV</button><label className="import">导入 JSON<input type="file" accept="application/json,.json" onChange={importJson} /></label></div></details>
+              <details className="data-menu"><summary>数据</summary><div className="toolbar"><label className="import">导入 CSV<input type="file" accept="text/csv,.csv" onChange={(event) => void previewCsv(event, selectedPersonalList)} /></label><label className="import">导入 JSON<input type="file" accept="application/json,.json" onChange={importJson} /></label><button onClick={exportCsv}>导出 CSV</button><button onClick={exportJson}>导出 JSON</button></div></details>
             </div> : <label className="collect-target">收藏到<select value={activeList?.id} onChange={(event) => void setActiveList(event.target.value)}>{lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>}
           </div>
           <input className="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder={`搜索${sourceName(selectedSource)}…`} />
@@ -570,6 +631,16 @@ function App() {
           <p className="keyboard-hint">空格翻面 · 方向键切换</p>
         </section>}
       </main>
+      {csvPreview && <div className="modal-backdrop" role="presentation" onMouseDown={() => setCsvPreview(null)}>
+        <section className="import-dialog" role="dialog" aria-modal="true" aria-labelledby="csv-title" onMouseDown={(event) => event.stopPropagation()}>
+          <p className="dialog-label">CSV 导入</p>
+          <h2 id="csv-title">确认导入到“{csvPreview.listName}”</h2>
+          <p className="dialog-file">{csvPreview.filename}</p>
+          <dl><div><dt>新增单词</dt><dd>{csvPreview.newCount}</dd></div><div><dt>已有单词</dt><dd>{csvPreview.existingCount}</dd></div><div><dt>跳过记录</dt><dd>{csvPreview.skipped}</dd></div></dl>
+          <p className="dialog-note">已有单词会加入这个词库，个人中文释义不会被覆盖。</p>
+          <div className="dialog-actions"><button className="quiet-button" onClick={() => setCsvPreview(null)}>取消</button><button className="primary" onClick={() => void importCsv()}>确认导入</button></div>
+        </section>
+      </div>}
       {message && <div className="toast" role="status">{message}</div>}
     </div>
   )

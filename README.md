@@ -17,7 +17,17 @@ MieWords is a minimal English–Chinese vocabulary tool for collecting words, or
 - 新建、重命名和管理自己的词库。
 - 搜索个人词库及内置 GRE、TOEFL 词库。
 - 将内置词库中的单词收藏到自己的词库。
-- 通过“数据”菜单导入或导出个人数据。
+- 通过“数据”菜单导入 CSV/JSON，或导出 CSV/JSON。
+
+CSV 支持 `English,Chinese` 或 `英文,中文` 表头：
+
+```csv
+English,Chinese
+abate,减轻；减弱
+ambivalent,矛盾的；犹豫不决的
+```
+
+导入 CSV 时，已有个人释义不会被覆盖，单词会加入当前打开的个人词库。
 
 ### 背诵
 
