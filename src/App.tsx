@@ -18,7 +18,7 @@ import {
 type View = 'add' | 'library' | 'dictation'
 type Rating = 'known' | 'unknown'
 type QuizWord = Pick<Word, 'id' | 'english' | 'chinese'>
-type BuiltInSource = typeof GRE_SOURCE | typeof TOEFL_SOURCE
+type BuiltInSource = typeof GRE_SOURCE | typeof TOEFL_SOURCE | typeof KMF_SOURCE
 type CardSession = { source: BuiltInSource; groupIndex: number }
 type CsvPreview = {
   filename: string
@@ -32,6 +32,8 @@ type CsvPreview = {
 
 const GRE_SOURCE = 'builtin:GRE'
 const TOEFL_SOURCE = 'builtin:TOEFL'
+const KMF_SOURCE = 'builtin:KMF'
+const BUILT_IN_SOURCES: BuiltInSource[] = [GRE_SOURCE, TOEFL_SOURCE, KMF_SOURCE]
 const personalSource = (id: string) => `personal:${id}`
 const personalId = (source: string) => source.replace('personal:', '')
 
@@ -89,7 +91,7 @@ function App() {
   const englishInput = useRef<HTMLInputElement>(null)
   const ratingLock = useRef(false)
   const [ratingSaving, setRatingSaving] = useState(false)
-  const [groupSelections, setGroupSelections] = useState<Record<BuiltInSource, number>>({ [GRE_SOURCE]: 0, [TOEFL_SOURCE]: 0 })
+  const [groupSelections, setGroupSelections] = useState<Record<BuiltInSource, number>>({ [GRE_SOURCE]: 0, [TOEFL_SOURCE]: 0, [KMF_SOURCE]: 0 })
   const [cardSession, setCardSession] = useState<CardSession | null>(null)
   const [cardIndex, setCardIndex] = useState(0)
   const [cardFlipped, setCardFlipped] = useState(false)
@@ -127,14 +129,17 @@ function App() {
   const builtInDecks = useMemo<Record<BuiltInSource, BuiltInWord[]>>(() => ({
     [GRE_SOURCE]: seededShuffle(wordsForList('GRE'), 'miewords-gre-v1'),
     [TOEFL_SOURCE]: seededShuffle(wordsForList('TOEFL'), 'miewords-toefl-v1'),
+    [KMF_SOURCE]: seededShuffle(wordsForList('KMF'), 'miewords-kmf-v1'),
   }), [])
   const greEnglish = useMemo(() => new Map(wordsForList('GRE').map((word) => [word.english.toLocaleLowerCase(), word])), [])
   const toeflEnglish = useMemo(() => new Map(wordsForList('TOEFL').map((word) => [word.english.toLocaleLowerCase(), word])), [])
+  const kmfEnglish = useMemo(() => new Map(wordsForList('KMF').map((word) => [word.english.toLocaleLowerCase(), word])), [])
 
   const getSourceWords = (source: string | null): QuizWord[] => {
     if (!source) return []
     if (source === GRE_SOURCE) return wordsForList('GRE')
     if (source === TOEFL_SOURCE) return wordsForList('TOEFL')
+    if (source === KMF_SOURCE) return wordsForList('KMF')
     const list = lists.find((item) => item.id === personalId(source))
     if (!list) return []
     const wordIds = new Set(list.wordIds)
@@ -144,6 +149,7 @@ function App() {
   const sourceName = (source: string | null) => {
     if (source === GRE_SOURCE) return 'GRE（镇考 3000 词）'
     if (source === TOEFL_SOURCE) return 'TOEFL（ECDICT 词库）'
+    if (source === KMF_SOURCE) return '考满分 GRE 机经词 1400'
     return lists.find((list) => list.id === personalId(source ?? ''))?.name ?? ''
   }
 
@@ -174,11 +180,14 @@ function App() {
     const existing = personalEnglish.get(key)
     const greWord = greEnglish.get(key)
     const toeflWord = toeflEnglish.get(key)
-    const match = existing ?? greWord ?? toeflWord
+    const kmfWord = kmfEnglish.get(key)
+    const match = existing ?? kmfWord ?? greWord ?? toeflWord
     if (!chineseTouched) setChinese(match?.chinese ?? '')
     if (existing) setSuggestionSource('来自你的个人词库')
-    else if (greWord) setSuggestionSource(toeflWord ? '来自 GRE · 同时收录于 TOEFL' : '来自 GRE')
-    else if (toeflWord) setSuggestionSource('来自 TOEFL')
+    else if (kmfWord || greWord || toeflWord) {
+      const sources = [kmfWord && '考满分', greWord && 'GRE', toeflWord && 'TOEFL'].filter(Boolean)
+      setSuggestionSource(`来自 ${sources.join(' · 同时收录于 ')}`)
+    }
     else setSuggestionSource('')
   }
 
@@ -562,6 +571,7 @@ function App() {
           <div className="library-directory">
             <button onClick={() => setSelectedSource(GRE_SOURCE)}><span><strong>GRE</strong><small>镇考 3000 词</small></span><em>{wordsForList('GRE').length}</em></button>
             <button onClick={() => setSelectedSource(TOEFL_SOURCE)}><span><strong>TOEFL</strong><small>ECDICT 词库</small></span><em>{wordsForList('TOEFL').length}</em></button>
+            <button onClick={() => setSelectedSource(KMF_SOURCE)}><span><strong>考满分 GRE</strong><small>机经词 1400</small></span><em>{wordsForList('KMF').length}</em></button>
           </div>
         </section>}
 
@@ -591,8 +601,8 @@ function App() {
           </div>
           <h2 className="group-title built-in-title">内置词库 · 单词卡</h2>
           <div className="deck-selectors">
-            {([GRE_SOURCE, TOEFL_SOURCE] as BuiltInSource[]).map((source) => <article key={source}>
-              <div><strong>{source === GRE_SOURCE ? 'GRE' : 'TOEFL'}</strong><small>{source === GRE_SOURCE ? '镇考 3000 词' : 'ECDICT 词库'}</small></div>
+            {BUILT_IN_SOURCES.map((source) => <article key={source}>
+              <div><strong>{source === GRE_SOURCE ? 'GRE' : source === TOEFL_SOURCE ? 'TOEFL' : '考满分 GRE'}</strong><small>{source === GRE_SOURCE ? '镇考 3000 词' : source === TOEFL_SOURCE ? 'ECDICT 词库' : '机经词 1400'}</small></div>
               <select value={groupSelections[source]} onChange={(event) => setGroupSelections((current) => ({ ...current, [source]: Number(event.target.value) }))}>
                 {Array.from({ length: Math.ceil(builtInDecks[source].length / 100) }, (_, index) => <option value={index} key={index}>List {index + 1}</option>)}
               </select>

@@ -21,3 +21,13 @@ dictionary fields are omitted.
 
 ECDICT is published under the MIT License. A copy is included at
 [`licenses/ECDICT_LICENSE.txt`](licenses/ECDICT_LICENSE.txt).
+
+## 考满分 GRE 机经词 1400
+
+The built-in `考满分 GRE 机经词 1400` list is extracted from the user-provided
+document *考满分GRE镇考机经词5.0（七天任务版）*. MieWords retains only the English
+headwords and concise Chinese translations; phonetics, parts of speech, English
+definitions, example sentences, synonyms, and original list order are omitted.
+
+This notice records the data source and does not assert that the source document
+is distributed under an open-source license.

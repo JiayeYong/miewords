@@ -1,6 +1,6 @@
 # MieWords
 
-MieWords is a minimal English–Chinese vocabulary tool for collecting words, organizing personal word lists, and reviewing GRE and TOEFL vocabulary. It runs directly in your browser and keeps your personal data on your device.
+MieWords is a minimal English–Chinese vocabulary tool for collecting words, organizing personal word lists, and reviewing GRE and TOEFL vocabulary. It includes GRE, TOEFL, and 考满分 GRE study decks, runs directly in your browser, and keeps your personal data on your device.
 
 ## 立即使用
 
@@ -10,12 +10,12 @@ MieWords is a minimal English–Chinese vocabulary tool for collecting words, or
 
 ### 录入
 
-输入英文单词和中文释义，选择保存到哪个个人词库。输入已经收录的单词时，MieWords 会尝试从个人词库、GRE 或 TOEFL 词库自动填写中文，你可以在保存前修改。
+输入英文单词和中文释义，选择保存到哪个个人词库。输入已经收录的单词时，MieWords 会尝试从个人词库或内置词库自动填写中文，你可以在保存前修改。
 
 ### 词库
 
 - 新建、重命名和管理自己的词库。
-- 搜索个人词库及内置 GRE、TOEFL 词库。
+- 搜索个人词库及内置 GRE、TOEFL、考满分 GRE 词库。
 - 将内置词库中的单词收藏到自己的词库。
 - 通过“数据”菜单导入 CSV/JSON，或导出 CSV/JSON。
 
