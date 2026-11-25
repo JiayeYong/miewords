@@ -129,7 +129,7 @@ function App() {
   const builtInDecks = useMemo<Record<BuiltInSource, BuiltInWord[]>>(() => ({
     [GRE_SOURCE]: seededShuffle(wordsForList('GRE'), 'miewords-gre-v1'),
     [TOEFL_SOURCE]: seededShuffle(wordsForList('TOEFL'), 'miewords-toefl-v1'),
-    [KMF_SOURCE]: seededShuffle(wordsForList('KMF'), 'miewords-kmf-v1'),
+    [KMF_SOURCE]: alphabetic(wordsForList('KMF')),
   }), [])
   const greEnglish = useMemo(() => new Map(wordsForList('GRE').map((word) => [word.english.toLocaleLowerCase(), word])), [])
   const toeflEnglish = useMemo(() => new Map(wordsForList('TOEFL').map((word) => [word.english.toLocaleLowerCase(), word])), [])
@@ -273,6 +273,11 @@ function App() {
     await listDatabase.save({ ...activeList, wordIds: [...activeList.wordIds, personalWord.id] })
     await loadData()
     notify(`已收藏到“${activeList.name}”。`)
+  }
+
+  const isInActiveList = (word: Pick<BuiltInWord, 'english'>) => {
+    const personalWord = personalEnglish.get(word.english.toLocaleLowerCase())
+    return Boolean(personalWord && activeList?.wordIds.includes(personalWord.id))
   }
 
   const beginEdit = (word: Word) => {
@@ -512,6 +517,7 @@ function App() {
   }
 
   const handleCardKey = (event: KeyboardEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest('.card-collection')) return
     if (event.key === 'ArrowLeft') moveCard(-1)
     else if (event.key === 'ArrowRight') moveCard(1)
     else if (event.key === ' ') {
@@ -625,13 +631,20 @@ function App() {
         {view === 'dictation' && cardSession && currentCard && <section className="panel card-study" tabIndex={0} onKeyDown={handleCardKey} autoFocus>
           <div className="card-study-heading">
             <div><button className="back-button" onClick={() => setCardSession(null)}>← 背诵</button><h1>单词卡</h1><p>{sourceName(cardSession.source)} · List {cardSession.groupIndex + 1}</p></div>
-            <span>{cardIndex + 1} / {cardWords.length}</span>
+            <div className="card-heading-actions">
+              <span>{cardIndex + 1} / {cardWords.length}</span>
+              <div className="card-collection">
+                <label>收藏到<select value={activeList?.id} onChange={(event) => void setActiveList(event.target.value)}>{lists.map((list) => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
+                <button className="quiet-button" onClick={() => void createList()}>＋ 新建词库</button>
+              </div>
+            </div>
           </div>
           <div className="card-progress" aria-hidden="true"><i style={{ width: `${((cardIndex + 1) / cardWords.length) * 100}%` }} /></div>
           <button className={`flashcard ${cardFlipped ? 'flipped' : ''}`} onClick={() => setCardFlipped((value) => !value)}>
             <strong>{currentCard.english}</strong>
             <p>{cardFlipped ? currentCard.chinese : '点击查看中文释义'}</p>
           </button>
+          <button className={`card-collect ${isInActiveList(currentCard) ? 'collected' : ''}`} onClick={() => void addToActiveList(currentCard)}>{isInActiveList(currentCard) ? `已收藏到“${activeList?.name}”` : `＋ 收藏到“${activeList?.name}”`}</button>
           <div className="card-controls">
             <button disabled={cardIndex === 0} onClick={() => moveCard(-1)}>← 上一个</button>
             <button onClick={() => void saveCardPosition(0)} disabled={cardIndex === 0}>第一张</button>

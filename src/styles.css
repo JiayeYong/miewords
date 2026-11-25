@@ -291,9 +291,14 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .round-complete p { margin: 0 0 24px; font-size: 20px; }
 
 .card-study { max-width: 760px; margin: auto; outline: none; }
-.card-study-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 42px; }
+.card-study-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 42px; }
 .card-study-heading p { margin: 10px 0 0; color: #8a908c; font-size: 13px; }
-.card-study-heading > span { color: #7d8780; font-size: 13px; }
+.card-heading-actions { display: grid; justify-items: end; gap: 10px; }
+.card-heading-actions > span { color: #7d8780; font-size: 13px; }
+.card-collection { display: flex; align-items: center; gap: 8px; }
+.card-collection label { display: flex; align-items: center; gap: 6px; color: #969b97; font-size: 12px; }
+.card-collection select { max-width: 150px; padding: 3px 18px 3px 4px; border: 0; outline: none; color: #526159; background: transparent; }
+.card-collection .quiet-button { padding: 4px; font-size: 12px; }
 .card-progress { height: 2px; margin: -22px 0 20px; overflow: hidden; background: #dfdfd7; }
 .card-progress i { display: block; height: 100%; background: #52715f; transition: width .2s ease; }
 .flashcard {
@@ -317,6 +322,18 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
 .flashcard p { min-height: 32px; margin: 38px 0 0; color: #9a9f9b; font-size: 14px; line-height: 1.7; }
 .flashcard.flipped { background: #f0f3ed; border-color: #cbd3cc; }
 .flashcard.flipped p { max-width: 620px; color: #40584b; font-size: clamp(26px, 3.4vw, 36px); font-weight: 500; line-height: 1.55; }
+.card-collect {
+  display: block;
+  margin: 15px auto 0;
+  padding: 5px 10px;
+  border: 0;
+  color: #52715f;
+  background: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+.card-collect:hover { color: #24352d; }
+.card-collect.collected { color: #a1a6a2; }
 .card-controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 20px; }
 .card-controls button {
   min-height: 44px;
@@ -396,6 +413,10 @@ h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); font-weight: 400; letter-spac
   .quiz-word em { grid-column: 2; min-height: 19px; margin-top: 5px; }
   .rating { right: 0; top: auto; bottom: 7px; transform: none; }
   .flashcard { min-height: 330px; padding: 36px 20px; }
+  .card-study-heading { align-items: flex-start; }
+  .card-heading-actions { justify-items: end; }
+  .card-collection { align-items: flex-end; flex-direction: column; gap: 3px; }
+  .card-collection select { max-width: 115px; }
   .card-controls { gap: 7px; }
   .card-controls button { padding: 5px; font-size: 12px; }
 }
